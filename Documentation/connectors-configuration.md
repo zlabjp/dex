@@ -52,6 +52,8 @@ This connector config lets users authenticate with other OIDC providers. In addi
 
 * trustedEmailProvider: a `boolean`. If true dex will trust the email address claims from this provider and not require that users verify their emails.
 
+* domain: a `string` (optional).  If set, users' email address domain must match the provided value. Email addresses that do not match will not be allowed to register or log in with dex. For example, if domain is set to example.com, the email address user@example.com will be granted an identity token, but user@example.net will not.
+
 In order to use the `oidc` connector you must register dex as an OIDC client; this mechanism is different from provider to provider. For Google, follow the instructions at their [developer site](https://developers.google.com/identity/protocols/OpenIDConnect?hl=en). Regardless of your provider, registering your client will also provide you with the client ID and secret.
 
 When registering dex as a client, you need to provide redirect URLs to the provider. dex requires just one:

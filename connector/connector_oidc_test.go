@@ -142,3 +142,91 @@ func TestRedirectError(t *testing.T) {
 		t.Errorf("Incorrect Location header: want=%s got=%s", wantLoc, gotLoc)
 	}
 }
+
+func TestParseEmailDomainSuccess(t *testing.T) {
+	tests := []struct {
+		email string
+		want  string
+	}{
+		{"foo@example.com", "example.com"},
+	}
+
+	for i, tt := range tests {
+		got, err := parseEmailDomain(tt.email)
+		if err != nil {
+			t.Errorf("case %d: unexpected error: %v", i, err)
+			continue
+		}
+		if tt.want != got {
+			t.Errorf("case %d: want=%v got=%v", i, tt.want, got)
+		}
+	}
+}
+
+func TestParseEmailDomainFailure(t *testing.T) {
+	tests := []string{
+		"example.com",
+		"@example.com",
+		"foo@",
+	}
+
+	for i, tt := range tests {
+		_, err := parseEmailDomain(tt)
+		if err == nil {
+			t.Errorf("case %d: expected error, got nil", i)
+		}
+	}
+}
+
+func TestOIDCConnectorValidateRemoteIdentity(t *testing.T) {
+	oc := &OIDCConnector{domain: "bar.example.com"}
+
+	// valid email address
+	ident := oidc.Identity{Email: "foo@bar.example.com"}
+	ok, err := oc.validateRemoteIdentity(&ident)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	} else if !ok {
+		t.Fatal("expected ok")
+	}
+
+	// incorrect domain
+	ident = oidc.Identity{Email: "foo@baz.example.com"}
+	ok, err = oc.validateRemoteIdentity(&ident)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	} else if ok {
+		t.Fatal("expected not ok")
+	}
+
+	// invalid email address
+	ident = oidc.Identity{Email: "pants"}
+	ok, err = oc.validateRemoteIdentity(&ident)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	} else if ok {
+		t.Fatal("expected not ok")
+	}
+}
+
+func TestOIDCConnectorValidateRemoteIdentityNoFilter(t *testing.T) {
+	oc := &OIDCConnector{domain: ""}
+
+	// valid email address
+	ident := oidc.Identity{Email: "foo@bar.example.com"}
+	ok, err := oc.validateRemoteIdentity(&ident)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	} else if !ok {
+		t.Fatal("expected ok")
+	}
+
+	// invalid email address
+	ident = oidc.Identity{Email: "pants"}
+	ok, err = oc.validateRemoteIdentity(&ident)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	} else if ok {
+		t.Fatal("expected not ok")
+	}
+}
