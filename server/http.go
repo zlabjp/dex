@@ -273,18 +273,37 @@ func handleAuthFunc(srv OIDCServer, idpcs []connector.Connector, tpl *template.T
 		}
 
 		q := r.URL.Query()
-
-		// Retrieve client id
-		clientid := q.Get("client_id")
-
-		// Retrieve state
 		state := q.Get("state")
-
-		// Retrieve response_type
+		register := q.Get("register") == "1" && registrationEnabled
+		clientid := q.Get("client_id")
 		responseType := q.Get("response_type")
-
-		// Retrieve scopes
 		qscope := strings.Fields(q.Get("scope"))
+
+		if e := q.Get("error"); e != "" {
+			if err := srv.KillSession(state); err != nil {
+				log.Errorf("Failed killing sessionKey %q: %v", state, err)
+			}
+			renderLoginPage(w, r, srv, idpcs, register, tpl)
+			return
+		}
+
+		// The auth endpoint currently deals with two kind of requests. Clients redirecting to dex for the initial
+		// OAuth2 flow, and upstream federated connectors who have identified a user through the (*Server).Login
+		// function but can't identify a user (see server/server.go). However because the latter case does not
+		// produce a valid OAuth2 auth requests, we have to short circuit early if we detect a registration request.
+		//
+		// An empty connector_id indicates that a federated identity provider has identified a user that hasn't
+		// registered. (It redirects here because it's attempting to reuse the registration logic provided by dex.)
+		//
+		// If you are attempting to update this code tread carefully and validate changes using the example-app.
+		//
+		// TODO(ericchiang): Seperate OAuth2 validation, and login/registration web logic.
+		connectorID := q.Get("connector_id")
+		idpc, ok := idx[connectorID]
+		if !ok {
+			renderLoginPage(w, r, srv, idpcs, register, tpl)
+			return
+		}
 
 		// Check client ID param
 		if clientid == "" {
@@ -349,6 +368,10 @@ func handleAuthFunc(srv OIDCServer, idpcs []connector.Connector, tpl *template.T
 		// Response type check
 		switch responseType {
 		case "code": // Add more cases as we support more response types
+		case "":
+			log.Errorf("Invalid auth request: no response_type provided")
+			redirectAuthError(w, oauth2.NewError(oauth2.ErrorUnsupportedResponseType), state, redirectURL)
+			return
 		default:
 			log.Errorf("Invalid auth request: unsupported response_type")
 			redirectAuthError(w, oauth2.NewError(oauth2.ErrorUnsupportedResponseType), state, redirectURL)
@@ -383,23 +406,6 @@ func handleAuthFunc(srv OIDCServer, idpcs []connector.Connector, tpl *template.T
 			return
 		}
 
-		register := q.Get("register") == "1" && registrationEnabled
-		e := q.Get("error")
-		if e != "" {
-			if err := srv.KillSession(state); err != nil {
-				log.Errorf("Failed killing sessionKey %q: %v", state, err)
-			}
-			renderLoginPage(w, r, srv, idpcs, register, tpl)
-			return
-		}
-
-		connectorID := q.Get("connector_id")
-		idpc, ok := idx[connectorID]
-		if !ok {
-			renderLoginPage(w, r, srv, idpcs, register, tpl)
-			return
-		}
-
 		nonce := q.Get("nonce")
 
 		key, err := srv.NewSession(connectorID, clientid, state, redirectURL, nonce, register, qscope)
@@ -420,7 +426,6 @@ func handleAuthFunc(srv OIDCServer, idpcs []connector.Connector, tpl *template.T
 				return
 			}
 		}
-
 		var p string
 		if register {
 			p = "select_account consent"
