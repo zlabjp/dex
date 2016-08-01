@@ -131,6 +131,7 @@ var connectorDisplayNameMap = map[string]string{
 	"local":     "Email",
 	"github":    "GitHub",
 	"bitbucket": "Bitbucket",
+	"azure":     "Azure",
 }
 
 type Template interface {
