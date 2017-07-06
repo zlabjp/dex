@@ -2,6 +2,8 @@
 package saml
 
 import (
+	"bytes"
+	"compress/flate"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -113,6 +115,10 @@ type Config struct {
 	//		urn:oasis:names:tc:SAML:2.0:nameid-format:persistent
 	//
 	NameIDPolicyFormat string `json:"nameIDPolicyFormat"`
+
+	// Use HTTP Redirect Binding for AuthnRequest. If this flag is turned off, HTTP
+	// Post Binding is used.
+	UseHTTPRedirectBinding bool `json:"UseHTTPRedirectBinding"`
 }
 
 type certStore struct {
@@ -165,6 +171,8 @@ func (c *Config) openConnector(logger logrus.FieldLogger) (*provider, error) {
 		logger:       logger,
 
 		nameIDPolicyFormat: c.NameIDPolicyFormat,
+
+		useHTTPRedirectBinding: c.UseHTTPRedirectBinding,
 	}
 
 	if p.nameIDPolicyFormat == "" {
@@ -236,10 +244,12 @@ type provider struct {
 
 	nameIDPolicyFormat string
 
+	useHTTPRedirectBinding bool
+
 	logger logrus.FieldLogger
 }
 
-func (p *provider) POSTData(s connector.Scopes, id string) (action, value string, err error) {
+func (p *provider) POSTData(s connector.Scopes, id string) (method, action, value string, err error) {
 
 	r := &authnRequest{
 		ProtocolBinding: bindingPOST,
@@ -260,12 +270,39 @@ func (p *provider) POSTData(s connector.Scopes, id string) (action, value string
 
 	data, err := xml.MarshalIndent(r, "", "  ")
 	if err != nil {
-		return "", "", fmt.Errorf("marshal authn request: %v", err)
+		return "", "", "", fmt.Errorf("marshal authn request: %v", err)
 	}
 
 	// See: https://docs.oasis-open.org/security/saml/v2.0/saml-bindings-2.0-os.pdf
 	// "3.5.4 Message Encoding"
-	return p.ssoURL, base64.StdEncoding.EncodeToString(data), nil
+
+	if p.useHTTPRedirectBinding {
+		method = "get"
+		var buff bytes.Buffer
+		writer, err := flate.NewWriter(&buff, flate.DefaultCompression)
+		if err != nil {
+			return "", "", "", fmt.Errorf("open deflate writer: %v", err)
+		}
+		offset := 0
+		for {
+			n, err := writer.Write(data[offset:])
+			if err != nil {
+				return "", "", "", fmt.Errorf("deflate request: %v", err)
+			}
+			if offset+n >= len(data) {
+				break
+			}
+			offset += n
+		}
+		writer.Close()
+		value = base64.StdEncoding.EncodeToString(buff.Bytes())
+
+	} else {
+		method = "post"
+		value = base64.StdEncoding.EncodeToString(data)
+	}
+
+	return method, p.ssoURL, value, nil
 }
 
 // HandlePOST interprets a request from a SAML provider attempting to verify a

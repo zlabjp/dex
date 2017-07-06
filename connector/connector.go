@@ -76,7 +76,7 @@ type SAMLConnector interface {
 	//
 	// POSTData should encode the provided request ID in the returned serialized
 	// SAML request.
-	POSTData(s Scopes, requestID string) (sooURL, samlRequest string, err error)
+	POSTData(s Scopes, requestID string) (method, sooURL, samlRequest string, err error)
 
 	// HandlePOST decodes, verifies, and maps attributes from the SAML response.
 	// It passes the expected value of the "InResponseTo" response field, which

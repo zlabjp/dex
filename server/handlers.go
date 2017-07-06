@@ -254,7 +254,7 @@ func (s *Server) handleConnectorLogin(w http.ResponseWriter, r *http.Request) {
 				s.logger.Errorf("Server template error: %v", err)
 			}
 		case connector.SAMLConnector:
-			action, value, err := conn.POSTData(scopes, authReqID)
+			method, action, value, err := conn.POSTData(scopes, authReqID)
 			if err != nil {
 				s.logger.Errorf("Creating SAML data: %v", err)
 				s.renderError(w, http.StatusInternalServerError, "Connector Login Error")
@@ -269,7 +269,7 @@ func (s *Server) handleConnectorLogin(w http.ResponseWriter, r *http.Request) {
 			    <title>SAML login</title>
 			  </head>
 			  <body>
-			    <form method="post" action="%s" >
+			    <form method="%s" action="%s" >
 				    <input type="hidden" name="SAMLRequest" value="%s" />
 				    <input type="hidden" name="RelayState" value="%s" />
 			    </form>
@@ -277,7 +277,7 @@ func (s *Server) handleConnectorLogin(w http.ResponseWriter, r *http.Request) {
 				    document.forms[0].submit();
 				</script>
 			  </body>
-			  </html>`, action, value, authReqID)
+			  </html>`, method, action, value, authReqID)
 		default:
 			s.renderError(w, http.StatusBadRequest, "Requested resource does not exist.")
 		}
